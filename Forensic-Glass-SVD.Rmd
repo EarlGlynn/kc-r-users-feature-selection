@@ -1,0 +1,228 @@
+---
+title: "Forensic Glass:  Singular Value Decomposition"
+output:
+  html_document:
+    theme: united
+    toc: yes
+  html_notebook:
+    theme: united
+    toc: yes
+---
+
+efg | 2018-09-03    
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+time.1 <- Sys.time()
+```
+## Setup
+
+```{r, comment=NA, message=FALSE, warning=FALSE}
+library(MASS)      # fgl data
+library(dplyr)     # select
+```
+
+Forensic Glass Data
+
+```{r, comment=NA}
+rawData <- fgl
+rawData  <- rawData %>% select(-type) %>% as.matrix()
+```
+
+Since different units of measure are involved, let's center/scale the data (make z scores).
+
+```{r, comment=NA}
+centeredScaledData <- scale(rawData, center=TRUE, scale=TRUE)
+```
+
+## Singular Value Decomposition (SVD) 
+
+Decompose original matrix into matrix product: u * diag(d) * t(v)
+
+Singular values, which are related to eigenvalues, are along diag(d) in decreasing order.
+
+```{r, comment=NA}
+udv <- svd(centeredScaledData)   
+str(udv)
+```
+
+### Variance explained by EigenFeatures
+
+The total variance is the sum of the squares of the eigenvalues -- the diagnonal terms of the diag(d) scaling matrix.
+
+```{r, comment=NA,fig.width=7, fig.height=7}
+plot(cumsum(udv$d^2 / sum(udv$d^2)), type="b", pch=15, ylim=c(0,1), col="blue",
+     main="Scree Plot", xlab="Principal Component", ylab="Fraction Variance Explained",
+     xaxt="n")
+axis(1, 1:length(udv$d), paste0("PC", 1:length(udv$d)) )
+grid()
+
+lines(udv$d^2 / sum(udv$d^2), type="b", pch=20, ylim=c(0,1), col="black")
+legend("right", c("Cumulative Variance", "Variance"), pch=c(15, 20), col=c("blue", "black"), box.lty=0)
+```
+
+Variance explained by eigenvalue
+
+All nine eigenvalues explain all the variance, but often a smaller number explain a large amount.
+
+```{r, comment=NA}
+(udv$d^2 / sum(udv$d^2))  %>% round(4)
+```
+
+Cumlative variance explained
+
+```{r, comment=NA}
+cumsum(udv$d^2 / sum(udv$d^2)) %>% round(4)
+```
+
+So, the first three singular values explain about 66% of the variance -- the first five explain almost 90%.
+
+### Right Singular Vectors Overview
+
+```{r, comment=NA}
+boxplot(udv$v, main="Right singular vectors", col="skyblue")
+grid()
+```
+
+Variable weighting by right singular vector
+
+Helper function
+
+```{r}
+showRightSingularVector <- function(nSingularVector, N, RSV, NAMES)
+{
+  xLocation <- barplot(RSV, main=paste("Right singular vector", 
+                                       nSingularVector),
+                       width=rep(0.8,N), space=rep(0.2, N))
+  text(xLocation, RSV/2, NAMES, adj=0.5)
+  abline(h=0)
+}
+```
+
+### 1st right singular vector
+
+Moderate high Al with low RI and Ca
+
+```{r}
+showRightSingularVector(1, nrow(udv$v), udv$v[,1], colnames(rawData))
+```
+
+### 2nd right singular vector
+
+Low Mg with moderate high Ba
+
+```{r}
+showRightSingularVector(2, nrow(udv$v), udv$v[,2], colnames(rawData))
+```
+
+### 3rd right singular vector
+
+Low K with moderate high SI
+
+```{r}
+showRightSingularVector(3, nrow(udv$v), udv$v[,3], colnames(rawData))
+```
+
+### 4th right singular vector
+
+High Si with moderate low Na and Mg
+
+```{r}
+showRightSingularVector(4, nrow(udv$v), udv$v[,4], colnames(rawData))
+```
+ 
+*****
+
+### SVD Technical Notes
+
+The singular value decomposition of matrix M is as follows:
+
+   
+$M = U \times \Sigma \times V'$   
+
+where 
+
+$U$ = left singular vectors
+
+$\Sigma$ = singular values diagonal matrix. The diagonal terms are the singular values, usually listed in decreasing order. The singular values are the eigenvalues of the matrix. 
+
+$V$ = right singular vectors 
+
+In R, given
+
+```
+    udv <- svd(M)
+```
+
+The original matrix M can be recomputed as follows: 
+
+```
+    M <- udv$u %*% diag(udv$d) %*% t(udv$v)
+```
+    
+where t() is the transpose function.
+
+#### Fewer dimensions
+
+Much of the variance of matrix M can be captured using fewer features (dimensions) based on the variance explained by the singular values.
+
+$M_{approx} = U_n \times \Sigma_n \times V_n'$   
+
+where
+
+$U_n$ = first n columns of U left singular vectors, udv$u[,1:features] in R
+
+$\Sigma_n$ = first n diagonal terms of $\Sigma$ matrix, diag(udv$d[1:features]) in R. 
+
+$V_n$ = first n columns of V right singular vectors, udv$v[,1:features] in R. 
+
+For the first four eigenvalues that explain about 80% of variance in the case above:
+
+```{r, comment=NA}
+features <- 4
+Mapprox4 <- udv$u[,1:features] %*% diag(udv$d[1:features]) %*% t(udv$v[,1:features])
+```
+
+Maximum absolute error between approximation and original value
+
+```{r, comment=NA}
+max(abs(centeredScaledData - Mapprox4))
+```
+
+For features = 9, the original matrix and approximation match within approximately machine precision.
+
+```{r, comment=NA}
+features <- 9
+Mapprox9 <- udv$u[,1:features] %*% diag(udv$d[1:features]) %*% t(udv$v[,1:features])
+max(abs(centeredScaledData - Mapprox9))
+```
+
+#### PCA scores
+
+PCA scores can be computed from the SVD U vectors and the diagnoal scaling matrix:
+
+```{r, comment=NA}
+PCAscores <- udv$u %*% diag(udv$d)  # Principal components
+dim(PCAscores)
+```
+
+Let's display the first 4 principal components, which will be used in the PCA example.  These 4 PCs explain nearly 80% of variance.
+
+```{r, comment=NA}
+PCAscores[, 1:4]  %>% head(10)
+```
+
+Compare these values to those created using the caret's preProcess function in the separate PCA notebook.
+
+```{r, comment=NA, echo=FALSE}
+time.2 <- Sys.time()
+processingTime <- paste("Processing time:", sprintf("%.1f",
+                        as.numeric(difftime(time.2, time.1, units="secs"))), "sec\n")
+```
+
+`r processingTime`
+`r format(time.2, "%Y-%m-%d %H:%M:%S")`      
+
+## References
+
+[Singular Value Decomposition](https://en.wikipedia.org/wiki/Singular_value_decomposition), Wikipedia

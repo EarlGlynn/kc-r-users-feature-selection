@@ -1,0 +1,116 @@
+---
+title: "Forensic Glass:  Correlation Matrix"
+output:
+  html_document:
+    theme: united
+    toc: yes
+  html_notebook:
+    theme: united
+    toc: yes
+---
+
+efg | 2018-09-03  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+time.1 <- Sys.time()
+```
+
+## Removal of highly correlated variables 
+
+Good idea for many machine learning algorithms based on linear algebra.  Not needed for treet based methods like random forest or Boruta.
+
+Removal of constant variables is a good idea for efficiency.
+
+## Setup
+
+```{r, comment=NA, message=FALSE, warning=FALSE}
+library(MASS)      # fgl data
+library(corrplot)  # corrplot
+library(caret)     # findCorrelation
+library(tidyverse) # select
+```
+
+## Forensic Glass Data
+
+```{r, comment=NA}
+rawData <- fgl 
+dim(rawData)
+```
+
+```{r}
+rawData %>% head()
+```
+
+## Define train and test datasets
+
+```{r}
+set.seed(71)
+
+trainSetIndices <- createDataPartition(rawData$type, p=0.75, list=FALSE)
+
+trainSet <- rawData[ trainSetIndices, ]
+testSet  <- rawData[-trainSetIndices, ]
+```
+
+```{r}
+dim(trainSet)
+```                    
+
+## trainSet Correlation Matrix 
+
+Use only training set data or we'll have a [data leak](https://machinelearningmastery.com/data-leakage-machine-learning/).
+
+```{r, fig.width=8, fig.height=8}
+colorScale <- colorRampPalette(c("#7F0000","red","#FF7F00","yellow","white",
+                                 "cyan", "#007FFF", "blue","#00007F"))(100)  
+
+corMatrix <- cor(trainSet %>% dplyr::select(-type))  # Create correlation matrix
+
+corrplot(corMatrix, type="upper", method="square", order="AOE",
+         tl.col="black", tl.srt=45, tl.cex=1.5,
+         addCoef.col="darkgrey", number.cex=1.25,
+         col=colorScale)
+mtext("Correlation Matrix (angular order of eigenvectors)", line=3)         
+```
+
+## Removing highly correlated pairs with caret
+
+Some machine learning algorithms are impeded by highly correlated predictors.  Caret's *findCorrelation* procedure can be used to remove one of the highly-correlated variables.
+
+```{r, comment=NA}
+HIGH_CORRELATION_CUTOFF <- 0.80
+
+corHigh <- findCorrelation(corMatrix, HIGH_CORRELATION_CUTOFF)
+if (length(corHigh) > 0)
+{
+  cat("Removing highly-correlated variable(s): ", names(trainSet)[corHigh])
+  trainSet <- trainSet[, -corHigh] 
+  testSet  <- testSet[, -corHigh]
+}
+
+trainSet %>% head()
+```
+
+In most machine learning applications, the *findCorrelation* check is applied to the training set data, but any highly-correlated predictors are also removed from the test set.
+
+```{r, comment=NA, echo=FALSE}
+time.2 <- Sys.time()
+processingTime <- paste("Processing time:", sprintf("%.1f",
+                        as.numeric(difftime(time.2, time.1, units="secs"))), "sec\n")
+```
+
+`r processingTime`
+`r format(time.2, "%Y-%m-%d %H:%M:%S")`         
+
+## References
+
+* [corrplot: Visualization of a Correlation Matrix](https://cran.r-project.org/web/packages/corrplot/index.html), CRAN.
+    
+* [An Introduction to corrplot Package](https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html), CRAN.
+
+* [Visualize correlation matrix using correlogram](http://www.sthda.com/english/wiki/visualize-correlation-matrix-using-correlogram), STHDA.
+
+* [An Introduction to Matrix Visualization & corrplot Package](https://uploads.cosx.org/2009/12/An-Introduction-to-Matrix-Visualization-and-corrplot-Package.pdf), Taiyun Wei, 2009.
+
+* [Introduction to Feature selection for bioinformaticians using R, correlation matrix filters, PCA & backward selection](Introduction to Feature selection for bioinformaticians using R, correlation matrix filters, PCA & backward selection), Yasset Perez-Riverol, 2013.

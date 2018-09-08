@@ -1,0 +1,190 @@
+---
+title: "Forensic Glass:  Recursive Feature Elimination"
+output: 
+  html_document:
+    theme: united
+    toc: yes
+  html_notebook:
+    theme: united
+    toc: yes
+---
+
+efg | 2018-09-06
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+time.1 <- Sys.time()
+```
+
+The `caret` package has a **recursive feature elimination** function, `rle`, which is a backward selection approach.  We start with all features, remove the least important feature, and then update the model.
+
+## Setup
+
+```{r, comment=NA, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(MASS)          # fgl data
+library(caret)         # createDataParition
+library(doParallel)    # registerDoParallel  
+library(kableExtra)    
+```
+
+## Forensic Glass Data
+
+```{r, comment=NA}
+rawData <- fgl
+dim(rawData)
+```
+
+```{r, comment=NA}
+rawData %>% head(5)
+```
+
+
+Relatively small "n" and class imbalance will make machine learning difficult.
+
+## Define train and test datasets
+
+```{r}
+set.seed(71)
+
+trainSetIndices <- createDataPartition(rawData$type, p=0.70, list=FALSE)
+
+trainSet <- rawData[ trainSetIndices, ]
+testSet  <- rawData[-trainSetIndices, ]   
+```
+
+```{r}
+dim(trainSet)
+```
+
+```{r}
+x <- trainSet[,-ncol(trainSet)]  # matrix for model training
+y <- trainSet[, ncol(trainSet)]  # vector of training outcomes
+```
+
+## Recursive Feature Elimination (RFE)
+
+From the [online help](http://topepo.github.io/caret/recursive-feature-elimination.html#rfe):  *There are a number of pre-defined sets of functions for several models, including: linear regression (in the object`lmFuncs`), random forests (`rfFuncs`), naive Bayes (`nbFuncs`), bagged trees (`treebagFuncs`) and functions that can be used with  caret ’s  train  function (`caretFuncs`).*
+
+```{r}
+subsets <- 1:ncol(x)
+
+nCV      <-  3 # 3-fold cv (since N is fairly small)
+nRepeats <- 50 # 50 cv repeats
+```
+
+Repeatable random numbers.  See ?refControl.
+
+```{r}
+set.seed(73)
+seeds <- vector(mode = "list", length = nCV*nRepeats+1)
+for (i in 1:(nCV*nRepeats)) seeds[[i]] <- sample.int(nCV*nRepeats, length(subsets))
+seeds[[nCV*nRepeats+1]] <- sample.int(1000, 1)
+```
+
+### Random Forests
+
+```{r}
+rfeController <- rfeControl(functions   = rfFuncs,   # random forests
+                            seeds       = seeds,
+                            method      = "repeatedcv",
+                            number      = nCV,          
+                            repeats     = nRepeats,
+                            verbose     = FALSE)
+```
+
+Setup parallel processing
+
+```{r, comment=NA}
+rCluster <- makePSOCKcluster(6)   # use 6 cores
+registerDoParallel(rCluster) 
+
+rfProfile <- rfe(x, y, sizes=subsets, rfeControl=rfeController)
+
+stopCluster(rCluster)
+```
+
+```{r, comment=NA}
+rfProfile
+```
+
+Output shows the best subset size was `r length(predictors(rfProfile))` predictors.
+
+```{r, comment=NA}
+predictors(rfProfile)
+```
+
+```{r, comment=NA
+rfProfile$fit
+```
+
+```{r}
+plot(rfProfile, type=c("g", "o"),
+     main="rf:  Accuracy by Number of Variables")
+```
+
+```{r}
+plot(rfProfile, type=c("g", "o"), metric="Kappa",
+     main="rf:  Kappa by Number of Variables")
+```
+
+### Naive Bayes
+
+```{r}
+rfeController <- rfeControl(functions   = nbFuncs,   # naive bayes
+                            seeds       = seeds,
+                            method      = "repeatedcv",
+                            number      = nCV,          
+                            repeats     = nRepeats,
+                            verbose     = FALSE)
+```
+
+Setup parallel processing
+
+```{r, comment=NA}
+rCluster <- makePSOCKcluster(6)   # use 6 cores
+registerDoParallel(rCluster) 
+
+nbProfile <- rfe(x, y, sizes=subsets, rfeControl=rfeController)
+
+stopCluster(rCluster)
+```
+
+```{r, comment=NA}
+nbProfile
+```
+
+Output shows the best subset size was `r length(predictors(nbProfile))` predictors.
+
+```{r, comment=NA}
+predictors(nbProfile)
+```
+
+```{r, comment=NA}
+nbProfile$fit
+```
+
+```{r}
+plot(nbProfile, type=c("g", "o"),
+     main="nb:  Accuracy by Number of Variables")
+```
+
+```{r}
+plot(nbProfile, type=c("g", "o"), metric="Kappa",
+     main="nb:  Kappa by Number of Variables")
+```
+
+```{r, comment=NA, echo=FALSE}
+time.2 <- Sys.time()
+processingTime <- paste("Processing time:", sprintf("%.1f",
+                        as.numeric(difftime(time.2, time.1, units="secs"))), "sec\n")
+```
+
+`r processingTime`
+`r format(time.2, "%Y-%m-%d %H:%M:%S")`        
+    
+## References
+
+[Feature Engineering using R](https://blogs.msdn.microsoft.com/microsoftrservertigerteam/2017/03/23/feature-engineering-using-r/), Microsoft, 2017. 
+
+[Recursive Feature Elimination](http://ml-tutorials.kyrcha.info/rfe.html), Kyriakos Chatzidimitriou, 2017.
