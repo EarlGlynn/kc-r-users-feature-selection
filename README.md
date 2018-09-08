@@ -1,5 +1,5 @@
 # Survey of Machine Learning Feature Selection Methods
-Talk given on Sept. 8, 2018 to [KC R Users Group](https://www.meetup.com/Kansas-City-R-Users-Group/).
+Talk given on Sept. 8, 2018 to the [KC R Users Group](https://www.meetup.com/Kansas-City-R-Users-Group/).
 
 The talk is an overview of several feature selection methods, including:
 
@@ -13,8 +13,6 @@ The talk is an overview of several feature selection methods, including:
 1. Principal Component Analysis (PCA)
 
 The Forensic Glass dataset from the MASS package is used in most of the examples.
-
-Some files mentioned are from a talk given last year:  [Using R's Caret Package for Machine Learning](https://github.com/EarlGlynn/kc-r-users-caret-2017).
 
 Since the use of PCs as predictors was introduced as a topic, the last few slides show visual exploratory analysis of PCs in a 3D scatterplot, both interactively and with an animated GIF file.
 
@@ -31,5 +29,9 @@ R Markdown and corresponding HTML files:
 **Forensic-Glass-caret-FILE.Rmd** and **Forensic-Glass-caret-FILE.html**
 
 **FILE**
+
     glmnet
     RFE
+
+Some additional files mentioned can be found in a talk given last year:  [Using R's Caret Package for Machine Learning](https://github.com/EarlGlynn/kc-r-users-caret-2017).
+
